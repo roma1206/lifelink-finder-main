@@ -56,13 +56,28 @@ const Auth = () => {
   }, [navigate]);
 
   const checkUserRoleAndRedirect = async (userId: string) => {
+    // First try the user_roles table
     const { data: roles } = await supabase
       .from("user_roles")
       .select("role")
       .eq("user_id", userId);
 
+    let role: string | null = null;
     if (roles && roles.length > 0) {
-      const role = roles[0].role;
+      role = roles[0].role;
+    }
+
+    // Fallback to legacy storage key used by older stubs
+    if (!role) {
+      try {
+        const legacy = JSON.parse(localStorage.getItem("lifelink_roles") || "{}");
+        if (legacy && legacy[userId]) role = legacy[userId];
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    if (role) {
       if (role === "admin") navigate("/admin");
       else if (role === "donor") navigate("/donor");
       else if (role === "seeker") navigate("/seeker");
