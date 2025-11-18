@@ -24,6 +24,47 @@ const SeekerDashboard = () => {
     getUserLocation();
   }, []);
 
+  useEffect(() => {
+    // Seed demo donors if table is empty to provide a better UI experience
+    (async () => {
+      try {
+        const { data } = await supabase.from("donor_profiles").select("*");
+        if (!data || data.length === 0) {
+          await supabase.from("donor_profiles").insert([
+            {
+              id: "demo_donor_1",
+              user_id: "demo_user_1",
+              full_name: "Alex Johnson",
+              email: "alex.johnson@example.com",
+              phone: "555-0101",
+              blood_type: "O+",
+              is_available: true,
+              location_address: "Downtown Clinic",
+              location_lat: 37.7749,
+              location_lng: -122.4194,
+              created_at: new Date().toISOString(),
+            },
+            {
+              id: "demo_donor_2",
+              user_id: "demo_user_2",
+              full_name: "Priya Singh",
+              email: "priya.singh@example.com",
+              phone: "555-0202",
+              blood_type: "A+",
+              is_available: true,
+              location_address: "City Hospital",
+              location_lat: 37.7849,
+              location_lng: -122.4094,
+              created_at: new Date().toISOString(),
+            },
+          ]);
+        }
+      } catch (e) {
+        // ignore seed errors
+      }
+    })();
+  }, []);
+
   const getUserLocation = () => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -224,8 +265,8 @@ const SeekerDashboard = () => {
                           <Droplets className="h-6 w-6 text-primary" />
                         </div>
                         <div>
-                          <div className="font-semibold text-lg">{donor.profiles?.full_name}</div>
-                          <div className="text-sm text-muted-foreground">{donor.profiles?.email}</div>
+                          <div className="font-semibold text-lg">{donor.full_name || donor.profiles?.full_name || donor.profiles?.full_name}</div>
+                          <div className="text-sm text-muted-foreground">{donor.email || donor.profiles?.email}</div>
                         </div>
                       </div>
                       

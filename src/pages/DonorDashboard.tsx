@@ -22,7 +22,30 @@ const DonorDashboard = () => {
   const loadDonorData = async () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
+      if (!user) {
+        // If no authenticated user, show demo data so the UI is rich for local/static mode
+        const demoProfile = {
+          id: "demo_donor_1",
+          user_id: "demo_user_1",
+          full_name: "Alex Johnson",
+          blood_type: "O+",
+          is_available: true,
+          location_address: "Downtown Clinic",
+          last_donation_date: null,
+        };
+        setDonorProfile(demoProfile);
+        setRequests([
+          {
+            id: "req_demo_1",
+            seeker_id: "demo_seeker_1",
+            profiles: { full_name: "Ravi Patel", email: "ravi.patel@example.com" },
+            created_at: new Date().toISOString(),
+            status: "pending",
+            blood_type: "O+",
+          },
+        ]);
+        return;
+      }
 
       const { data: profile } = await supabase
         .from("donor_profiles")
@@ -188,6 +211,31 @@ const DonorDashboard = () => {
             </Button>
           </CardContent>
         </Card>
+
+        {/* Quick Actions */}
+        <div className="grid md:grid-cols-3 gap-4">
+          <Card className="p-4">
+            <CardTitle className="text-lg">Share Availability</CardTitle>
+            <CardDescription>Share a quick link or QR so nearby seekers can contact you.</CardDescription>
+            <CardContent>
+              <Button className="mt-3" variant="outline">Copy Link</Button>
+            </CardContent>
+          </Card>
+          <Card className="p-4">
+            <CardTitle className="text-lg">Update Location</CardTitle>
+            <CardDescription>Keep your location up-to-date to be found by seekers.</CardDescription>
+            <CardContent>
+              <Button className="mt-3">Update Location</Button>
+            </CardContent>
+          </Card>
+          <Card className="p-4">
+            <CardTitle className="text-lg">Health Notes</CardTitle>
+            <CardDescription>Log last donation or health notes for your records.</CardDescription>
+            <CardContent>
+              <Button className="mt-3">Add Note</Button>
+            </CardContent>
+          </Card>
+        </div>
 
         {/* Recent Requests */}
         <Card>
