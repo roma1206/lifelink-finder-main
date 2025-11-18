@@ -19,6 +19,8 @@ const SeekerDashboard = () => {
   const [searchBloodType, setSearchBloodType] = useState<string>("");
   const [sendingRequest, setSendingRequest] = useState<string | null>(null);
   const [requestMessage, setRequestMessage] = useState("");
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [modalDonor, setModalDonor] = useState<any | null>(null);
 
   useEffect(() => {
     getUserLocation();
@@ -158,13 +160,15 @@ const SeekerDashboard = () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
 
+      const messageToSend = requestMessage;
+
       const { error: requestError } = await supabase
         .from("blood_requests")
         .insert([{
           seeker_id: user.id,
           donor_id: donorId,
           blood_type: bloodType as any,
-          message: requestMessage,
+          message: messageToSend,
           urgency_level: "high",
         }]);
 
@@ -199,12 +203,68 @@ const SeekerDashboard = () => {
     }
   };
 
+  const openContactModal = (donor: any) => {
+    setModalDonor(donor);
+    setRequestMessage("");
+    setContactModalOpen(true);
+  };
+
+  const closeContactModal = () => {
+    setModalDonor(null);
+    setRequestMessage("");
+    setContactModalOpen(false);
+  };
+
+  const confirmSendFromModal = async () => {
+    if (!modalDonor) return;
+    await sendBloodRequest(modalDonor.user_id || modalDonor.id, modalDonor.blood_type);
+    closeContactModal();
+  };
+
+  const seedDemoData = async () => {
+    try {
+      await supabase.from("donor_profiles").insert([
+        {
+          id: `demo_donor_${Date.now()}`,
+          user_id: `demo_user_${Date.now()}`,
+          full_name: "Sofia Ramirez",
+          email: "sofia.ramirez@example.com",
+          phone: "555-0303",
+          blood_type: "B+",
+          is_available: true,
+          location_address: "Community Health Center",
+          location_lat: 37.768,
+          location_lng: -122.431,
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      await supabase.from("notifications").insert([
+        {
+          id: `demo_notif_${Date.now()}`,
+          user_id: "demo_user_1",
+          title: "Welcome to Lifeline Finder",
+          message: "Demo data seeded. Try searching for donors.",
+          type: "info",
+          created_at: new Date().toISOString(),
+        },
+      ]);
+
+      toast({ title: "Seeded demo data", description: "A demo donor and notification were added." });
+    } catch (e: any) {
+      toast({ title: "Seed failed", description: e?.message || String(e), variant: "destructive" });
+    }
+  };
+
   return (
     <Layout role="seeker">
       <div className="space-y-6 max-w-6xl mx-auto">
         <div>
           <h1 className="text-3xl font-bold">Find Blood Donors</h1>
           <p className="text-muted-foreground">Search for available donors by blood type</p>
+          <div className="mt-3 flex items-center gap-2">
+            <Button size="sm" variant="outline" onClick={seedDemoData}>Seed Demo Data</Button>
+          </div>
         </div>
 
         {/* Search Card */}
@@ -291,21 +351,11 @@ const SeekerDashboard = () => {
                         )}
                       </div>
                       
-                      {sendingRequest === donor.user_id && (
-                        <div className="space-y-2">
-                          <Label>Message (Optional)</Label>
-                          <Textarea
-                            placeholder="Add a message to your request..."
-                            value={requestMessage}
-                            onChange={(e) => setRequestMessage(e.target.value)}
-                            rows={2}
-                          />
-                        </div>
-                      )}
+                      {/* Message input moved to modal for a cleaner UX */}
                     </div>
 
                     <Button
-                      onClick={() => sendBloodRequest(donor.user_id, donor.blood_type)}
+                      onClick={() => openContactModal(donor)}
                       disabled={sendingRequest !== null}
                       variant="hero"
                       size="lg"
@@ -318,6 +368,24 @@ const SeekerDashboard = () => {
                 </CardContent>
               </Card>
             ))}
+          </div>
+        )}
+
+        {/* Contact Modal */}
+        {contactModalOpen && modalDonor && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+            <div className="w-full max-w-lg bg-background rounded-lg shadow-lg p-6">
+              <h3 className="text-xl font-semibold">Send Request to {modalDonor.full_name || modalDonor.profiles?.full_name}</h3>
+              <p className="text-sm text-muted-foreground mt-1">Blood type: {modalDonor.blood_type}</p>
+              <div className="mt-4">
+                <Label>Message</Label>
+                <Textarea value={requestMessage} onChange={(e) => setRequestMessage(e.target.value)} rows={4} />
+              </div>
+              <div className="flex justify-end gap-2 mt-4">
+                <Button variant="ghost" onClick={closeContactModal}>Cancel</Button>
+                <Button onClick={confirmSendFromModal} variant="hero">Send Request</Button>
+              </div>
+            </div>
           </div>
         )}
       </div>

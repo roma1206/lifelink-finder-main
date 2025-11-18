@@ -144,6 +144,18 @@ const DonorDashboard = () => {
             <h1 className="text-3xl font-bold">Donor Dashboard</h1>
             <p className="text-muted-foreground">Manage your availability and requests</p>
           </div>
+          <div>
+            <Button size="sm" variant="outline" onClick={async () => {
+              try {
+                await supabase.from("donor_profiles").insert([{ id: `demo_donor_${Date.now()}`, user_id: `demo_user_${Date.now()}`, full_name: "Demo Donor", blood_type: "AB+", is_available: true, location_address: "Demo Clinic", created_at: new Date().toISOString() }]);
+                await supabase.from("blood_requests").insert([{ id: `req_demo_${Date.now()}`, donor_id: `demo_user_${Date.now()}`, seeker_id: "demo_seeker_1", blood_type: "AB+", message: "Demo request", status: "pending", created_at: new Date().toISOString() }]);
+                toast({ title: "Seeded demo donor", description: "A demo donor and request were added." });
+                await loadDonorData();
+              } catch (e: any) {
+                toast({ title: "Seed failed", description: e?.message || String(e), variant: "destructive" });
+              }
+            }}>Seed Demo Data</Button>
+          </div>
         </div>
 
         {/* Availability Toggle Card */}
