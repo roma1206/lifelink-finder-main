@@ -81,7 +81,10 @@ const Auth = () => {
       if (role === "admin") navigate("/admin");
       else if (role === "donor") navigate("/donor");
       else if (role === "seeker") navigate("/seeker");
+      return true;
     }
+
+    return false;
   };
 
   const handleSignUp = async (e: React.FormEvent) => {
@@ -149,11 +152,17 @@ const Auth = () => {
 
       // If sign in returned user data, check role and redirect. Also attempt to fetch current user as fallback.
       const userId = data?.user?.id;
+      let redirected = false;
       if (userId) {
-        await checkUserRoleAndRedirect(userId);
+        redirected = await checkUserRoleAndRedirect(userId);
       } else {
         const { data: userData } = await supabase.auth.getUser();
-        if (userData?.user) await checkUserRoleAndRedirect(userData.user.id);
+        if (userData?.user) redirected = await checkUserRoleAndRedirect(userData.user.id);
+      }
+
+      // If no redirect happened (user has no role yet), send them home so they can pick a role
+      if (!redirected) {
+        navigate("/");
       }
     } catch (error: any) {
       toast({

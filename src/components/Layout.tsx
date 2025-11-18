@@ -19,19 +19,18 @@ const Layout = ({ children, role }: LayoutProps) => {
   const [notificationCount, setNotificationCount] = useState(0);
 
   useEffect(() => {
+    // Read current session but do not force navigation to /auth. Pages should be
+    // viewable without an active session; actions that require auth will handle
+    // prompting the user. We still update local `user` state so header can show
+    // the correct Sign In / Sign Out UI.
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user ?? null);
-      if (!session?.user) {
-        navigate("/auth");
-      }
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setUser(session?.user ?? null);
-        if (!session?.user && event === 'SIGNED_OUT') {
-          navigate("/auth");
-        }
+        // Do not auto-navigate to /auth on sign-out; keep UX simple and allow pages to render.
       }
     );
 
@@ -94,30 +93,38 @@ const Layout = ({ children, role }: LayoutProps) => {
             </Link>
             
             <div className="flex items-center gap-4">
-              {role && (
+              {user ? (
                 <>
-                  <Link to={`/${role}/notifications`}>
-                    <Button variant="ghost" size="icon" className="relative">
-                      <Bell className="h-5 w-5" />
-                      {notificationCount > 0 && (
-                        <Badge 
-                          className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-primary"
-                        >
-                          {notificationCount}
-                        </Badge>
-                      )}
-                    </Button>
-                  </Link>
-                  <Link to={`/${role}/profile`}>
-                    <Button variant="ghost" size="icon">
-                      <User className="h-5 w-5" />
-                    </Button>
-                  </Link>
+                  {role && (
+                    <>
+                      <Link to={`/${role}/notifications`}>
+                        <Button variant="ghost" size="icon" className="relative">
+                          <Bell className="h-5 w-5" />
+                          {notificationCount > 0 && (
+                            <Badge 
+                              className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 bg-primary"
+                            >
+                              {notificationCount}
+                            </Badge>
+                          )}
+                        </Button>
+                      </Link>
+                      <Link to={`/${role}/profile`}>
+                        <Button variant="ghost" size="icon">
+                          <User className="h-5 w-5" />
+                        </Button>
+                      </Link>
+                    </>
+                  )}
+                  <Button variant="ghost" size="icon" onClick={handleSignOut}>
+                    <LogOut className="h-5 w-5" />
+                  </Button>
                 </>
+              ) : (
+                <Link to="/auth">
+                  <Button variant="ghost">Sign In</Button>
+                </Link>
               )}
-              <Button variant="ghost" size="icon" onClick={handleSignOut}>
-                <LogOut className="h-5 w-5" />
-              </Button>
             </div>
           </nav>
         </div>

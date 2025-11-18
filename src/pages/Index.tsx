@@ -1,8 +1,18 @@
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Heart, Droplets, Shield, Users } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
+  const navigate = useNavigate();
+
+  // Navigate directly to the dashboard page for the selected role.
+  // We allow viewing the dashboard pages without forcing sign-in; actions that require
+  // authentication inside those pages will prompt the user as needed.
+  const handleRoleClick = (role: "donor" | "seeker") => {
+    navigate(`/${role}`);
+  };
+
   return (
     <div className="min-h-screen bg-gradient-subtle">
       {/* Hero Section */}
@@ -12,9 +22,7 @@ const Index = () => {
             <Droplets className="h-8 w-8 text-primary" />
             <span className="text-2xl font-bold text-foreground">LifeLink</span>
           </div>
-          <Link to="/auth">
-            <Button variant="outline">Sign In</Button>
-          </Link>
+          <Button variant="outline" onClick={() => navigate('/auth')}>Sign In</Button>
         </nav>
       </header>
 
@@ -39,18 +47,14 @@ const Index = () => {
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 pt-4">
-            <Link to="/auth?role=donor">
-              <Button variant="hero" size="xl" className="w-full sm:w-auto">
-                <Droplets className="h-5 w-5" />
-                Become a Donor
-              </Button>
-            </Link>
-            <Link to="/auth?role=seeker">
-              <Button variant="outline" size="xl" className="w-full sm:w-auto">
-                <Users className="h-5 w-5" />
-                Find a Donor
-              </Button>
-            </Link>
+            <Button onClick={() => handleRoleClick('donor')} variant="hero" size="xl" className="w-full sm:w-auto">
+              <Droplets className="h-5 w-5" />
+              Become a Donor
+            </Button>
+            <Button onClick={() => handleRoleClick('seeker')} variant="outline" size="xl" className="w-full sm:w-auto">
+              <Users className="h-5 w-5" />
+              Find a Donor
+            </Button>
           </div>
         </div>
 

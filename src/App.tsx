@@ -8,6 +8,8 @@ import Auth from "./pages/Auth";
 import DonorDashboard from "./pages/DonorDashboard";
 import SeekerDashboard from "./pages/SeekerDashboard";
 import AdminDashboard from "./pages/AdminDashboard";
+import Profile from "./pages/Profile";
+import Notifications from "./pages/Notifications";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +26,8 @@ const App = () => (
           <Route path="/donor" element={<DonorDashboard />} />
           <Route path="/seeker" element={<SeekerDashboard />} />
           <Route path="/admin" element={<AdminDashboard />} />
+          <Route path="/:role/profile" element={<Profile />} />
+          <Route path="/:role/notifications" element={<Notifications />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
