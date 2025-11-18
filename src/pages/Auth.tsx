@@ -140,18 +140,11 @@ const Auth = () => {
     }
   };
 
-  if (user) {
-    return (
-      <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-4">
-        <Card className="w-full max-w-md">
-          <CardHeader className="text-center">
-            <Loader2 className="h-8 w-8 animate-spin mx-auto text-primary" />
-            <CardTitle>Redirecting...</CardTitle>
-          </CardHeader>
-        </Card>
-      </div>
-    );
-  }
+  // Note: we intentionally don't early-return when a user session exists.
+  // The `checkUserRoleAndRedirect` call in useEffect will redirect users who have
+  // an assigned role. If a signed-in user does not yet have a role, we keep showing
+  // the auth UI so they can complete signup/profile flows. This avoids a stuck
+  // "Redirecting..." state when the role is missing.
 
   return (
     <div className="min-h-screen bg-gradient-subtle flex items-center justify-center p-4">
