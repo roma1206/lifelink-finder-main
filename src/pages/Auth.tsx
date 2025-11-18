@@ -101,6 +101,8 @@ const Auth = () => {
           title: "Account created!",
           description: "You can now sign in with your credentials.",
         });
+        // After creating role, attempt to redirect based on role
+        await checkUserRoleAndRedirect(data.user.id);
       }
     } catch (error: any) {
       toast({
@@ -118,7 +120,7 @@ const Auth = () => {
     setLoading(true);
 
     try {
-      const { error } = await supabase.auth.signInWithPassword({
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: signInData.email,
         password: signInData.password,
       });
@@ -129,6 +131,15 @@ const Auth = () => {
         title: "Welcome back!",
         description: "You've successfully signed in.",
       });
+
+      // If sign in returned user data, check role and redirect. Also attempt to fetch current user as fallback.
+      const userId = data?.user?.id;
+      if (userId) {
+        await checkUserRoleAndRedirect(userId);
+      } else {
+        const { data: userData } = await supabase.auth.getUser();
+        if (userData?.user) await checkUserRoleAndRedirect(userData.user.id);
+      }
     } catch (error: any) {
       toast({
         title: "Error",
