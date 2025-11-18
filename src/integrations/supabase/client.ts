@@ -10,6 +10,18 @@ type Listener = (event: string, session: any) => void;
 
 const listeners: Listener[] = [];
 
+function getStored(table: string) {
+  try {
+    return JSON.parse(localStorage.getItem(`lifelink_table_${table}`) || "null") || [];
+  } catch (e) {
+    return [];
+  }
+}
+
+function setStored(table: string, data: any[]) {
+  localStorage.setItem(`lifelink_table_${table}`, JSON.stringify(data));
+}
+
 function getStoredUsers() {
   try {
     return JSON.parse(localStorage.getItem("lifelink_users") || "{}");
@@ -20,18 +32,6 @@ function getStoredUsers() {
 
 function setStoredUsers(users: Record<string, any>) {
   localStorage.setItem("lifelink_users", JSON.stringify(users));
-}
-
-function getStoredRoles() {
-  try {
-    return JSON.parse(localStorage.getItem("lifelink_roles") || "{}");
-  } catch (e) {
-    return {};
-  }
-}
-
-function setStoredRoles(roles: Record<string, string>) {
-  localStorage.setItem("lifelink_roles", JSON.stringify(roles));
 }
 
 function notifyListeners(event: string, session: any) {
@@ -78,13 +78,7 @@ const auth = {
     localStorage.setItem("lifelink_session", JSON.stringify(session));
     localStorage.setItem("lifelink_user", JSON.stringify({ id, email }));
 
-    // Store role if provided via insert to user_roles (caller may also insert separately)
-    if (options?.data?.role) {
-      const roles = getStoredRoles();
-      roles[id] = options.data.role;
-      setStoredRoles(roles);
-    }
-
+    // Optionally store role via user_roles table insert (handled elsewhere by callers)
     notifyListeners("SIGNED_IN", session);
     return { data: { user }, error: null };
   },
@@ -113,48 +107,105 @@ const auth = {
   }
 };
 
+function applyFilters(rows: any[], filters: Array<{ col: string; val: any }>) {
+  return rows.filter((r) => filters.every((f) => {
+    // support nested selects like seeker_id etc. For now simple equality
+    return r[f.col] === f.val;
+  }));
+}
+
 function from(table: string) {
   const builder: any = {
     _table: table,
-    _select(cols: string) {
+    _cols: "*",
+    _filters: [] as Array<{ col: string; val: any }>,
+    _order: null as any,
+    _limit: null as number | null,
+    _options: undefined as any,
+    select(cols: string, options?: any) {
       this._cols = cols;
+      this._options = options;
       return this;
     },
-    select(cols: string) { return this._select(cols); },
+    order(_field: string, _opts?: any) {
+      // no-op for local stub
+      return this;
+    },
+    limit(n: number) {
+      this._limit = n;
+      return this;
+    },
     async eq(col: string, val: any) {
-      // Only user_roles is queried currently by app
-      if (table === "user_roles" && col === "user_id") {
-        const roles = getStoredRoles();
-        const role = roles[val];
-        return { data: role ? [{ role }] : [], error: null };
+      this._filters.push({ col, val });
+      const rows = getStored(this._table);
+      const filtered = applyFilters(rows, this._filters);
+
+      if (this._options && this._options.head) {
+        // return only count information
+        return { count: filtered.length, data: [], error: null };
       }
-      return { data: [], error: null };
+
+      let result = filtered;
+      if (this._limit != null) result = result.slice(0, this._limit);
+      return { data: result, error: null };
     },
-    async insert(rows: any[]) {
-      if (table === "user_roles") {
-        const roles = getStoredRoles();
-        rows.forEach((r) => {
-          if (r.user_id && r.role) {
-            roles[r.user_id] = r.role;
-          }
-        });
-        setStoredRoles(roles);
-        return { data: rows, error: null };
-      }
-      return { data: rows, error: null };
+    async insert(rows: any[] | any) {
+      const rowsArr = Array.isArray(rows) ? rows : [rows];
+      const existing = getStored(this._table);
+      // assign ids if missing
+      rowsArr.forEach((r: any) => {
+        if (!r.id) r.id = `local_${Date.now()}_${Math.floor(Math.random()*10000)}`;
+        existing.unshift(r);
+      });
+      setStored(this._table, existing);
+      return { data: rowsArr, error: null };
     },
-    async update(_data: any) {
+    async update(data: any) {
+      const rows = getStored(this._table);
+      const filtered = applyFilters(rows, this._filters);
+      const updated = rows.map((r) => {
+        if (filtered.includes(r)) return { ...r, ...data };
+        return r;
+      });
+      setStored(this._table, updated);
       return { data: [], error: null };
     },
     async delete() {
+      const rows = getStored(this._table);
+      const filtered = applyFilters(rows, this._filters);
+      const remaining = rows.filter((r) => !filtered.includes(r));
+      setStored(this._table, remaining);
       return { data: [], error: null };
+    },
+    async single() {
+      const rows = getStored(this._table);
+      const filtered = applyFilters(rows, this._filters);
+      return { data: filtered.length > 0 ? filtered[0] : null, error: null };
     }
   };
 
   return builder;
 }
 
+// channel / realtime stubs
+const channels: any[] = [];
+function channel(name: string) {
+  const ch = {
+    name,
+    on(_type: string, _opts: any, cb: any) { return ch; },
+    subscribe() { channels.push(ch); return ch; },
+  };
+  return ch;
+}
+
+function removeChannel(ch: any) {
+  const i = channels.indexOf(ch);
+  if (i >= 0) channels.splice(i, 1);
+}
+
 export const supabase = {
   auth,
   from,
+  channel,
+  removeChannel,
 };
