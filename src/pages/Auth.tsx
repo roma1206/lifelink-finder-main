@@ -24,6 +24,7 @@ const Auth = () => {
     password: "",
     fullName: "",
     role: searchParams.get("role") || "donor",
+    bloodType: "",
   });
 
   const [signInData, setSignInData] = useState({
@@ -115,12 +116,92 @@ const Auth = () => {
 
         if (roleError) throw roleError;
 
+        // If user signed up as a donor, create an initial donor_profile row
+        if (signUpData.role === "donor") {
+          try {
+            const profile = {
+              id: `profile_${data.user.id}`,
+              user_id: data.user.id,
+              full_name: signUpData.fullName,
+              email: signUpData.email,
+              phone: null,
+              blood_type: null,
+              is_available: true,
+              location_address: null,
+              location_lat: null,
+              location_lng: null,
+              created_at: new Date().toISOString(),
+            };
+            const { error: profileError } = await supabase.from("donor_profiles").insert(profile);
+            if (profileError) {
+              // non-fatal: log and continue
+              console.warn("Failed to create donor profile on signup:", profileError);
+            }
+          } catch (e) {
+            console.warn("Exception creating donor profile:", e);
+          }
+        }
+        // If user signed up as a seeker, create an initial seeker_profiles row
+        if (signUpData.role === "seeker") {
+          try {
+            const seeker = {
+              id: `seeker_${data.user.id}`,
+              user_id: data.user.id,
+              full_name: signUpData.fullName,
+              email: signUpData.email,
+              phone: null,
+              blood_type_needed: null,
+              urgency_level: null,
+              location_address: null,
+              location_lat: null,
+              location_lng: null,
+              needs_by: null,
+              message: null,
+              created_at: new Date().toISOString(),
+            };
+            const { error: seekerError } = await supabase.from("seeker_profiles").insert(seeker);
+            if (seekerError) {
+              console.warn("Failed to create seeker profile on signup:", seekerError);
+            }
+          } catch (e) {
+            console.warn("Exception creating seeker profile:", e);
+          }
+        }
+
         toast({
           title: "Account created!",
           description: "You can now sign in with your credentials.",
         });
         // After creating role, attempt to redirect based on role
         await checkUserRoleAndRedirect(data.user.id);
+      } else {
+        // When Supabase is configured to require email confirmation, signUp may not
+        // return a user immediately. Store the chosen role keyed by email in
+        // localStorage so we can reconcile it when the user signs in.
+        try {
+          const key = 'lifelink_roles_by_email';
+          const existing = JSON.parse(localStorage.getItem(key) || '{}');
+          existing[signUpData.email] = signUpData.role;
+          localStorage.setItem(key, JSON.stringify(existing));
+          // Also store pending profile data so we can create donor_profiles after confirmation
+          const pKey = 'lifelink_pending_profiles';
+          const pending = JSON.parse(localStorage.getItem(pKey) || '{}');
+          pending[signUpData.email] = { full_name: signUpData.fullName, email: signUpData.email };
+          localStorage.setItem(pKey, JSON.stringify(pending));
+        } catch (e) {
+          // ignore localStorage errors
+        }
+
+        toast({
+          title: 'Account created — confirm your email',
+          description: 'Check your inbox and confirm the link. You will be redirected to your dashboard; complete confirmation to enable full features.',
+        });
+        // If user signed up as donor but confirmation is required, still redirect
+        // them to the donor dashboard so they can see the UI; we'll reconcile
+        // their role/profile after they confirm and sign in.
+        if (signUpData.role === 'donor') {
+          navigate('/donor');
+        }
       }
     } catch (error: any) {
       toast({
@@ -160,18 +241,128 @@ const Auth = () => {
         if (userData?.user) redirected = await checkUserRoleAndRedirect(userData.user.id);
       }
 
-      // If no redirect happened (user has no role yet), send them home so they can pick a role
-      if (!redirected) {
+      // If no redirect happened (user has no role yet), try to reconcile any
+      // role stored locally keyed by email (from signUp when email confirmation
+      // was required). If found, insert into user_roles and redirect.
+      if (!redirected && data?.user) {
+        try {
+          const key = 'lifelink_roles_by_email';
+          const mapping = JSON.parse(localStorage.getItem(key) || '{}');
+          const role = mapping[signInData.email];
+          if (role) {
+            // insert mapping into user_roles for this user id
+            const { error: roleError } = await supabase.from('user_roles').insert([{ user_id: data.user.id, role }]);
+            if (!roleError) {
+              // cleanup local mapping
+              delete mapping[signInData.email];
+              localStorage.setItem(key, JSON.stringify(mapping));
+              // If role is donor, also create donor_profiles if we have pending profile data
+              if (role === 'donor') {
+                try {
+                  const pKey = 'lifelink_pending_profiles';
+                  const pending = JSON.parse(localStorage.getItem(pKey) || '{}');
+                  const profileData = pending[signInData.email];
+                  if (profileData) {
+                    const profile = {
+                      id: `profile_${data.user.id}`,
+                      user_id: data.user.id,
+                      full_name: profileData.full_name,
+                      email: profileData.email,
+                      phone: null,
+                      blood_type: null,
+                      is_available: true,
+                      location_address: null,
+                      location_lat: null,
+                      location_lng: null,
+                      created_at: new Date().toISOString(),
+                    };
+                    const { error: profileError } = await supabase.from('donor_profiles').insert(profile);
+                    if (!profileError) {
+                      delete pending[signInData.email];
+                      localStorage.setItem(pKey, JSON.stringify(pending));
+                    }
+                  }
+                } catch (e) {
+                  // ignore
+                }
+              // If role is seeker, also create seeker_profiles if we have pending profile data
+              if (role === 'seeker') {
+                try {
+                  const pKey = 'lifelink_pending_profiles';
+                  const pending = JSON.parse(localStorage.getItem(pKey) || '{}');
+                  const profileData = pending[signInData.email];
+                  if (profileData) {
+                    const seeker = {
+                      id: `seeker_${data.user.id}`,
+                      user_id: data.user.id,
+                      full_name: profileData.full_name,
+                      email: profileData.email,
+                      phone: null,
+                      blood_type_needed: null,
+                      urgency_level: null,
+                      location_address: null,
+                      location_lat: null,
+                      location_lng: null,
+                      needs_by: null,
+                      message: null,
+                      created_at: new Date().toISOString(),
+                    };
+                    const { error: seekerError } = await supabase.from('seeker_profiles').insert(seeker);
+                    if (!seekerError) {
+                      delete pending[signInData.email];
+                      localStorage.setItem(pKey, JSON.stringify(pending));
+                    }
+                  }
+                } catch (e) {
+                  // ignore
+                }
+              }
+              }
+              // redirect now
+              await checkUserRoleAndRedirect(data.user.id);
+              return;
+            }
+          }
+        } catch (e) {
+          // ignore errors and fall back to homepage
+        }
+
+        // Finally, if still not redirected, send them home so they can pick a role
         navigate("/");
       }
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      // Helpful handling when Supabase requires email confirmation
+      const msg = String(error?.message || error);
+      if (msg.toLowerCase().includes("email not confirmed") || msg.toLowerCase().includes("confirmation")) {
+        toast({
+          title: "Email not confirmed",
+          description: "Please confirm your email address. Check your inbox for the confirmation link. You can also send a magic sign-in link.",
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Error",
+          description: error.message,
+          variant: "destructive",
+        });
+      }
     } finally {
       setLoading(false);
+    }
+  };
+
+  const sendMagicLink = async () => {
+    if (!signInData.email) {
+      toast({ title: 'Enter email', description: 'Please enter your email to send a magic link.' });
+      return;
+    }
+
+    try {
+      const { data, error } = await supabase.auth.signInWithOtp({ email: signInData.email });
+      if (error) throw error;
+      toast({ title: 'Magic link sent', description: 'Check your email for a login link.' });
+    } catch (e: any) {
+      toast({ title: 'Error sending magic link', description: e.message || String(e), variant: 'destructive' });
     }
   };
 
@@ -232,6 +423,14 @@ const Auth = () => {
                     {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Sign In
                   </Button>
+                  <div className="mt-2 text-sm flex items-center justify-between">
+                    <button type="button" className="text-primary underline" onClick={sendMagicLink}>
+                      Send magic sign-in link
+                    </button>
+                    <button type="button" className="text-muted-foreground" onClick={() => setSignInData({ ...signInData, password: '' })}>
+                      Clear password
+                    </button>
+                  </div>
                 </form>
               </CardContent>
             </Card>
@@ -290,6 +489,27 @@ const Auth = () => {
                       <SelectContent>
                         <SelectItem value="donor">Donor</SelectItem>
                         <SelectItem value="seeker">Seeker</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="bloodType">Blood Group</Label>
+                    <Select
+                      value={signUpData.bloodType}
+                      onValueChange={(value) => setSignUpData({ ...signUpData, bloodType: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select blood group" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="A+">A+</SelectItem>
+                        <SelectItem value="A-">A-</SelectItem>
+                        <SelectItem value="B+">B+</SelectItem>
+                        <SelectItem value="B-">B-</SelectItem>
+                        <SelectItem value="AB+">AB+</SelectItem>
+                        <SelectItem value="AB-">AB-</SelectItem>
+                        <SelectItem value="O+">O+</SelectItem>
+                        <SelectItem value="O-">O-</SelectItem>
                       </SelectContent>
                     </Select>
                   </div>

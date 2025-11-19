@@ -14,6 +14,7 @@ const DonorDashboard = () => {
   const [requests, setRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [toggling, setToggling] = useState(false);
+  const [seekers, setSeekers] = useState<any[]>([]);
 
   useEffect(() => {
     loadDonorData();
@@ -66,6 +67,18 @@ const DonorDashboard = () => {
         .limit(5);
 
       setRequests(requestsData || []);
+
+      // Also load recent pending requests from seekers (unassigned) so donors
+      // can discover seekers who need help.
+      const { data: seekersData } = await supabase
+        .from('blood_requests')
+        .select(`*, profiles:seeker_id (full_name, email)`)
+        .eq('status', 'pending')
+        .is('donor_id', null)
+        .order('created_at', { ascending: false })
+        .limit(10);
+
+      setSeekers(seekersData || []);
     } catch (error) {
       console.error("Error loading donor data:", error);
     } finally {
@@ -284,6 +297,35 @@ const DonorDashboard = () => {
                         {request.status}
                       </Badge>
                       <Badge variant="outline">{request.blood_type}</Badge>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* Seekers looking for donors (unassigned requests) */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Seekers Looking for Donors</CardTitle>
+            <CardDescription>Recent unassigned requests from seekers</CardDescription>
+          </CardHeader>
+          <CardContent>
+            {seekers.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">No active seeker requests right now.</div>
+            ) : (
+              <div className="space-y-3">
+                {seekers.map((s) => (
+                  <div key={s.id} className="p-4 border rounded-lg flex items-center justify-between">
+                    <div>
+                      <div className="font-medium">{s.profiles?.full_name || 'Unknown seeker'}</div>
+                      <div className="text-sm text-muted-foreground">{s.profiles?.email}</div>
+                      <div className="text-xs text-muted-foreground">{new Date(s.created_at).toLocaleDateString()}</div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{s.blood_type}</Badge>
+                      <Button size="sm" variant="hero">Contact</Button>
                     </div>
                   </div>
                 ))}

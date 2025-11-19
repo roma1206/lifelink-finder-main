@@ -26,6 +26,29 @@ const SeekerDashboard = () => {
     getUserLocation();
   }, []);
 
+  // On mount, try to load current seeker profile and initial donors
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          // try to load seeker profile for this user
+          const { data: seekerRows } = await supabase.from('seeker_profiles').select('*').eq('user_id', user.id).limit(1);
+          if (seekerRows && seekerRows.length > 0) {
+            const seeker = seekerRows[0];
+            if (seeker.blood_type_needed) setSearchBloodType(seeker.blood_type_needed);
+          }
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // load donors (all available by default)
+      await loadDonors();
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     // Seed demo donors if table is empty to provide a better UI experience
     (async () => {
@@ -101,54 +124,57 @@ const SeekerDashboard = () => {
   };
 
   const searchDonors = async () => {
-    if (!searchBloodType) {
-      toast({
-        title: "Select blood type",
-        description: "Please select a blood type to search.",
-        variant: "destructive",
-      });
-      return;
-    }
+    // Use loadDonors to support searching and default load behavior
+    await loadDonors(searchBloodType || undefined);
+  };
 
+  const loadDonors = async (bloodType?: string) => {
     setLoading(true);
     try {
-      const { data } = await supabase
-        .from("donor_profiles")
-        .select(`
-          *,
-          profiles:user_id (full_name, email, phone)
-        `)
-        .eq("blood_type", searchBloodType as any)
+      let query = supabase.from("donor_profiles").select(`*, profiles:user_id (full_name, email, phone)`)
         .eq("is_available", true);
 
+      if (bloodType) {
+        query = query.eq("blood_type", bloodType as any);
+      }
+
+      const { data } = await query;
       let donorsWithDistance = data || [];
 
       if (userLocation) {
         donorsWithDistance = donorsWithDistance.map((donor) => ({
           ...donor,
-          distance: calculateDistance(
-            userLocation.lat,
-            userLocation.lng,
-            donor.location_lat,
-            donor.location_lng
-          ),
-        })).sort((a, b) => a.distance - b.distance);
+          distance: (donor.location_lat && donor.location_lng && userLocation)
+            ? calculateDistance(
+                userLocation.lat,
+                userLocation.lng,
+                donor.location_lat,
+                donor.location_lng
+              )
+            : undefined,
+        }));
+      }
+
+      // If seeker has a preferred blood type, prioritize exact matches first
+      if (bloodType) {
+        donorsWithDistance.sort((a, b) => {
+          // exact match priority already filtered; just sort by distance if available
+          if (a.distance != null && b.distance != null) return a.distance - b.distance;
+          if (a.distance != null) return -1;
+          if (b.distance != null) return 1;
+          return 0;
+        });
+      } else if (userLocation) {
+        donorsWithDistance = donorsWithDistance.sort((a, b) => {
+          if (a.distance == null) return 1;
+          if (b.distance == null) return -1;
+          return a.distance - b.distance;
+        });
       }
 
       setDonors(donorsWithDistance);
-      
-      if (donorsWithDistance.length === 0) {
-        toast({
-          title: "No donors found",
-          description: "No available donors found with this blood type.",
-        });
-      }
     } catch (error: any) {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Error", description: error.message, variant: "destructive" });
     } finally {
       setLoading(false);
     }
